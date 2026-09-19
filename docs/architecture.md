@@ -46,19 +46,6 @@ kubecone investigate deployment/payment-api
 | `internal/cli` | Cobra commands: investigate, scan, pods, events, nodes, namespaces, current-context, explain, version |
 | `internal/ai` | optional OpenAI enrichment after ranked findings; anthropic/ollama still stubs |
 
-## What this borrowed, and what it did not copy
-
-KubeCone is original code. Nearby clones were used as study material:
-
-- **K9s**: Cobra CLI layout, kubeconfig flags, `internal/` packaging
-- **Robusta**: collect context, enrich, then act; OOM and crash-loop as first-class signals
-- **KRR**: recommendations should say what to change (memory bump after OOM)
-- **client-go**: the actual cluster API
-- **kind**: disposable cluster for the incident lab
-- **Metrics Server / OpenTelemetry / controller-runtime**: documented future seams, not dependencies yet
-
-controller-runtime informers, Prometheus, and OpenTelemetry are intentionally absent until there is a concrete need.
-
 ## Ranking
 
 More specific failures win over generic ones. An OOMKilled container that later sits in CrashLoopBackOff is reported as `OOM_KILLED`, not `CRASH_LOOP`.
