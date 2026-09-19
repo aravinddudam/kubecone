@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-# kubecone
-kubecone v0.1
-=======
 # KubeCone
 
 Deterministic Kubernetes investigation CLI.
@@ -9,7 +5,6 @@ Deterministic Kubernetes investigation CLI.
 ```bash
 kubecone investigate deployment/payment-api
 ```
-
 KubeCone collects cluster evidence, builds an evidence graph, identifies the failure with rules, then prints a terminal report or JSON. AI is opt-in and comes after the diagnosis, not before it.
 
 ## Status
@@ -98,5 +93,3 @@ internal/analyzer/      oom, crashloop, imagepull, scheduling, probe
 internal/ai/            provider stubs
 internal/reporter/      terminal + JSON
 tests/incidents/        broken-app fixtures for kind
-```
->>>>>>> b68d009 (Initial commit)
