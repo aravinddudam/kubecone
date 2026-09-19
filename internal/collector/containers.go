@@ -6,6 +6,10 @@ import (
 	"github.com/aravinddudam/kubecone/internal/evidence"
 )
 
+func ContainerFacts(pods []corev1.Pod) []evidence.ContainerFact {
+	return containerFacts(pods)
+}
+
 func containerFacts(pods []corev1.Pod) []evidence.ContainerFact {
 	var out []evidence.ContainerFact
 	for _, pod := range pods {

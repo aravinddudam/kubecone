@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"os"
 
 	"github.com/aravinddudam/kubecone/internal/cli"
@@ -8,6 +10,9 @@ import (
 
 func main() {
 	if err := cli.New().Execute(); err != nil {
-		os.Exit(1)
+		if !errors.Is(err, cli.ErrFinding) {
+			fmt.Fprintln(os.Stderr, err)
+		}
+		os.Exit(cli.ExitCode(err))
 	}
 }

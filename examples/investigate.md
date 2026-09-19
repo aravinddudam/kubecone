@@ -26,3 +26,16 @@ kubecone investigate deployment/payment-api -n kubecone-lab -o json
 ```
 
 The `primary.code` field is what CI compares against `tests/incidents/*/expected.json`.
+
+Scan a namespace first when you do not know which workload is broken:
+
+```bash
+kubecone scan -n kubecone-lab --unhealthy
+kubecone explain IMAGE_PULL
+```
+
+`--quiet --fail` is the CI shape: print the primary diagnosis and exit 2 when a rule matched.
+
+```bash
+kubecone investigate deployment/payment-api -n kubecone-lab --quiet --fail
+```

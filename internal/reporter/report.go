@@ -1,27 +1,11 @@
 package reporter
 
 import (
-	"fmt"
-	"io"
 	"os"
-	"strings"
-
-	"github.com/aravinddudam/kubecone/internal/evidence"
 )
 
-func Write(out io.Writer, report *evidence.Report, format string) error {
-	switch strings.ToLower(format) {
-	case "json":
-		return JSON(out, report)
-	case "text", "terminal", "":
-		return Terminal(out, report)
-	default:
-		return fmt.Errorf("unknown output format %q", format)
-	}
-}
-
-func colorEnabled() bool {
-	if os.Getenv("NO_COLOR") != "" {
+func colorEnabled(noColor bool) bool {
+	if noColor || os.Getenv("NO_COLOR") != "" {
 		return false
 	}
 	if os.Getenv("FORCE_COLOR") != "" {

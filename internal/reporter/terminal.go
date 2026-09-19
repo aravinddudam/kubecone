@@ -8,8 +8,8 @@ import (
 	"github.com/aravinddudam/kubecone/internal/evidence"
 )
 
-func Terminal(out io.Writer, report *evidence.Report) error {
-	c := colorEnabled()
+func Terminal(out io.Writer, report *evidence.Report, opts Options) error {
+	c := colorEnabled(opts.NoColor)
 	bold := func(s string) string { return paint(c, "\033[1m", s) }
 	dim := func(s string) string { return paint(c, "\033[2m", s) }
 	sev := func(s string) string {
@@ -23,6 +23,10 @@ func Terminal(out io.Writer, report *evidence.Report) error {
 		default:
 			return strings.ToUpper(s)
 		}
+	}
+
+	if opts.Quiet {
+		return terminalQuiet(out, report, sev)
 	}
 
 	fmt.Fprintln(out, bold("KubeCone investigation"))
@@ -54,23 +58,28 @@ func Terminal(out io.Writer, report *evidence.Report) error {
 		fmt.Fprintln(out)
 	}
 
-	fmt.Fprintln(out, bold("Evidence graph"))
-	fmt.Fprintf(out, "  %d nodes, %d edges\n", len(report.Graph.Nodes), len(report.Graph.Edges))
-	for _, n := range report.Graph.Nodes {
-		if n.Kind == evidence.KindEvent || n.Kind == evidence.KindLog {
-			continue
+	if !opts.NoGraph {
+		fmt.Fprintln(out, bold("Evidence graph"))
+		fmt.Fprintf(out, "  %d nodes, %d edges\n", len(report.Graph.Nodes), len(report.Graph.Edges))
+		for _, n := range report.Graph.Nodes {
+			if n.Kind == evidence.KindEvent || n.Kind == evidence.KindLog {
+				continue
+			}
+			status := n.Status
+			if status == "" {
+				status = n.Kind
+			}
+			fmt.Fprintf(out, "  - %-12s %-40s %s\n", n.Kind, n.Name, dim(status))
 		}
-		status := n.Status
-		if status == "" {
-			status = n.Kind
-		}
-		fmt.Fprintf(out, "  - %-12s %-40s %s\n", n.Kind, n.Name, dim(status))
 	}
 
-	if len(report.Evidence.Events) > 0 {
+	max := opts.MaxEvents
+	if max < 0 {
+		max = 8
+	}
+	if max > 0 && len(report.Evidence.Events) > 0 {
 		fmt.Fprintln(out)
 		fmt.Fprintln(out, bold("Recent events"))
-		max := 8
 		if len(report.Evidence.Events) < max {
 			max = len(report.Evidence.Events)
 		}
@@ -79,7 +88,7 @@ func Terminal(out io.Writer, report *evidence.Report) error {
 		}
 	}
 
-	if report.AI != nil {
+	if report.AI != nil && !(opts.HideAISkip && report.AI.Skipped) {
 		fmt.Fprintln(out)
 		fmt.Fprintln(out, bold("AI"))
 		if report.AI.Skipped {
@@ -87,6 +96,19 @@ func Terminal(out io.Writer, report *evidence.Report) error {
 		} else {
 			fmt.Fprintf(out, "  %s\n", report.AI.Text)
 		}
+	}
+	return nil
+}
+
+func terminalQuiet(out io.Writer, report *evidence.Report, sev func(string) string) error {
+	if report.Primary == nil {
+		fmt.Fprintln(out, "no diagnosis")
+		return nil
+	}
+	fmt.Fprintf(out, "[%s] %s  %s\n", sev(report.Primary.Severity), report.Primary.Code, report.Primary.Resource)
+	fmt.Fprintf(out, "%s\n", report.Primary.Summary)
+	if report.Primary.Recommendation != "" {
+		fmt.Fprintf(out, "Next: %s\n", report.Primary.Recommendation)
 	}
 	return nil
 }

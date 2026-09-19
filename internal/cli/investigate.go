@@ -8,26 +8,31 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/aravinddudam/kubecone/internal/engine"
+	"github.com/aravinddudam/kubecone/internal/evidence"
 	"github.com/aravinddudam/kubecone/internal/kubernetes"
 	"github.com/aravinddudam/kubecone/internal/reporter"
 )
 
 func investigateCmd(f *flags) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "investigate RESOURCE",
-		Short: "Collect evidence and diagnose a Kubernetes resource",
+		Use:     "investigate RESOURCE",
+		Aliases: []string{"inv", "diag"},
+		Short:   "Collect evidence and diagnose a Kubernetes resource",
 		Long: `Investigate a workload by collecting Kubernetes evidence, building a
 graph, and running deterministic analyzers.
 
-Examples:
-  kubecone investigate deployment/payment-api
-  kubecone investigate deploy/payment-api -n payments -o json
-  kubecone investigate pod/payment-api-abc`,
+RESOURCE is kind/name, or namespace/kind/name. A bare name is treated as a
+Deployment. Supported kinds: pod, deploy, rs, svc, sts, ds, job, cronjob.`,
+		Example: `  kubecone investigate deployment/customer-service -n banking-dev
+  kubecone investigate deploy/fraud-api -n banking-dev -o json
+  kubecone investigate pod/customer-service-5859cfc476-bbkc6 -n banking-dev
+  kubecone investigate banking-dev/deploy/customer-service --quiet
+  kubecone investigate deploy/payment-api -n shop --fail --no-graph`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			timeout, err := time.ParseDuration(f.timeout)
+			timeout, err := parseTimeout(f.timeout)
 			if err != nil {
-				return fmt.Errorf("invalid --timeout: %w", err)
+				return err
 			}
 			target, err := kubernetes.ParseTarget(args[0], f.namespace)
 			if err != nil {
@@ -54,13 +59,47 @@ Examples:
 			if err != nil {
 				return err
 			}
-			return reporter.Write(cmd.OutOrStdout(), report, f.output)
+			return writeReport(cmd, f, report)
 		},
 	}
 
 	cmd.Flags().Int64Var(&f.logTail, "log-tail", 80, "log lines to collect per container")
 	cmd.Flags().StringVar(&f.timeout, "timeout", "30s", "investigation timeout")
+	cmd.Flags().IntVar(&f.events, "events", 8, "recent events to print (0 hides the section)")
+	cmd.Flags().BoolVar(&f.noGraph, "no-graph", false, "omit the evidence graph from text output")
 	cmd.Flags().BoolVar(&f.ai, "ai", false, "send ranked evidence to a configured AI provider (off by default)")
 	cmd.Flags().StringVar(&f.aiProvider, "ai-provider", "", "ai provider: openai|anthropic|ollama")
 	return cmd
+}
+
+func writeReport(cmd *cobra.Command, f *flags, report *evidence.Report) error {
+	if err := reporter.Write(cmd.OutOrStdout(), report, reporter.Options{
+		Format:     f.output,
+		Quiet:      f.quiet,
+		NoGraph:    f.noGraph,
+		NoColor:    f.noColor,
+		HideAISkip: !f.ai,
+		MaxEvents:  f.events,
+	}); err != nil {
+		return err
+	}
+	if f.fail && isFailure(report) {
+		return ErrFinding
+	}
+	return nil
+}
+
+func isFailure(report *evidence.Report) bool {
+	return report.Primary != nil && report.Primary.Code != "" && report.Primary.Code != evidence.CodeHealthy
+}
+
+func parseTimeout(raw string) (time.Duration, error) {
+	timeout, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf("invalid --timeout %q: %w", raw, err)
+	}
+	if timeout <= 0 {
+		return 0, fmt.Errorf("--timeout must be greater than 0")
+	}
+	return timeout, nil
 }

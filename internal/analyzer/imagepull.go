@@ -68,10 +68,17 @@ func (ImagePull) Analyze(snap evidence.Snapshot) []evidence.Finding {
 
 func imagePullAdvice(message, image string) string {
 	m := strings.ToLower(message + " " + image)
+	ecr := strings.Contains(m, ".dkr.ecr.") || strings.Contains(m, "amazonaws.com/")
+	auth := strings.Contains(m, "unauthorized") || strings.Contains(m, "denied") ||
+		strings.Contains(m, "authentication") || strings.Contains(m, "no basic auth")
+	missing := strings.Contains(m, "not found") || strings.Contains(m, "manifest unknown") ||
+		strings.Contains(m, "failed to resolve")
 	switch {
-	case strings.Contains(m, "unauthorized") || strings.Contains(m, "denied") || strings.Contains(m, "authentication"):
+	case ecr:
+		return "This is an Amazon ECR image. Confirm the repository and tag exist, then check node instance profile or IRSA for ecr:GetAuthorizationToken, ecr:BatchGetImage, and ecr:GetDownloadUrlForLayer."
+	case auth:
 		return "Create or fix an imagePullSecret and attach it to the service account or pod spec."
-	case strings.Contains(m, "not found") || strings.Contains(m, "manifest unknown"):
+	case missing:
 		return "Correct the image name and tag. The registry does not have this reference."
 	default:
 		return "Verify the image name, tag, registry reachability, and pull credentials."

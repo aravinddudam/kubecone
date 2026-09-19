@@ -6,6 +6,10 @@ import (
 	"github.com/aravinddudam/kubecone/internal/evidence"
 )
 
+func PodFacts(pods []corev1.Pod) []evidence.PodFact {
+	return podFacts(pods)
+}
+
 func podFacts(pods []corev1.Pod) []evidence.PodFact {
 	out := make([]evidence.PodFact, 0, len(pods))
 	for _, p := range pods {

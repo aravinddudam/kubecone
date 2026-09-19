@@ -41,8 +41,9 @@ kubecone investigate deployment/payment-api
 | `internal/collector` | one-shot collection into an `evidence.Snapshot` |
 | `internal/evidence` | snapshot, graph, finding, report types |
 | `internal/analyzer` | deterministic rules and ranking |
-| `internal/engine` | investigate orchestration |
+| `internal/engine` | investigate orchestration and namespace scan |
 | `internal/reporter` | text and JSON output |
+| `internal/cli` | Cobra commands: investigate, scan, explain, version |
 | `internal/ai` | provider interface; stubs only in v0.1 |
 
 ## What this borrowed, and what it did not copy

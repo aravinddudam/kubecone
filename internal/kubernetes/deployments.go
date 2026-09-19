@@ -28,3 +28,15 @@ func (c *Client) GetStatefulSet(ctx context.Context, namespace, name string) (*a
 func (c *Client) GetDaemonSet(ctx context.Context, namespace, name string) (*appsv1.DaemonSet, error) {
 	return c.Kube.AppsV1().DaemonSets(namespace).Get(ctx, name, metav1.GetOptions{})
 }
+
+func (c *Client) ListDeployments(ctx context.Context, namespace string) (*appsv1.DeploymentList, error) {
+	return c.Kube.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{})
+}
+
+func (c *Client) ListStatefulSets(ctx context.Context, namespace string) (*appsv1.StatefulSetList, error) {
+	return c.Kube.AppsV1().StatefulSets(namespace).List(ctx, metav1.ListOptions{})
+}
+
+func (c *Client) ListDaemonSets(ctx context.Context, namespace string) (*appsv1.DaemonSetList, error) {
+	return c.Kube.AppsV1().DaemonSets(namespace).List(ctx, metav1.ListOptions{})
+}

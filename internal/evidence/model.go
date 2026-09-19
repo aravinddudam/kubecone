@@ -202,3 +202,19 @@ type AINote struct {
 	Reason   string `json:"reason,omitempty"`
 	Text     string `json:"text,omitempty"`
 }
+
+// ScanItem is one row from `kubecone scan`.
+type ScanItem struct {
+	Namespace string `json:"namespace"`
+	Kind      string `json:"kind"`
+	Name      string `json:"name"`
+	Ready     string `json:"ready"`
+	Status    string `json:"status"`
+	Code      string `json:"code,omitempty"`
+	Title     string `json:"title,omitempty"`
+	Resource  string `json:"resource"`
+}
+
+func (s ScanItem) Unhealthy() bool {
+	return s.Code != "" && s.Code != CodeHealthy
+}
