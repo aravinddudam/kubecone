@@ -1,0 +1,5 @@
+{
+  "target": "deployment/dns-checker",
+  "namespace": "kubecone-lab",
+  "notes": "Reserved for a future DNS analyzer. v0.1 will likely report HEALTHY because the pod keeps running."
+}

@@ -1,0 +1,5 @@
+{
+  "target": "deployment/payment-api",
+  "namespace": "kubecone-lab",
+  "codes": ["OOM_KILLED"]
+}

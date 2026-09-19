@@ -1,0 +1,5 @@
+{
+  "target": "deployment/session-cache",
+  "namespace": "kubecone-lab",
+  "codes": ["PROBE_FAILED", "CRASH_LOOP"]
+}

@@ -1,0 +1,5 @@
+{
+  "target": "deployment/checkout-worker",
+  "namespace": "kubecone-lab",
+  "codes": ["CRASH_LOOP"]
+}

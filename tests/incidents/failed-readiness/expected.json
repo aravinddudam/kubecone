@@ -1,0 +1,5 @@
+{
+  "target": "deployment/storefront",
+  "namespace": "kubecone-lab",
+  "codes": ["PROBE_FAILED"]
+}

@@ -1,0 +1,5 @@
+{
+  "target": "deployment/ledger-writer",
+  "namespace": "kubecone-lab",
+  "codes": ["FAILED_SCHEDULING"]
+}

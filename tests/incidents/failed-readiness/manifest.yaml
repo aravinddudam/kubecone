@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storefront
+  namespace: kubecone-lab
+  labels:
+    kubecone.dev/scenario: failed-readiness
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: storefront
+      kubecone.dev/scenario: failed-readiness
+  template:
+    metadata:
+      labels:
+        app: storefront
+        kubecone.dev/scenario: failed-readiness
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /this-path-does-not-exist
+              port: 80
+            initialDelaySeconds: 1
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi

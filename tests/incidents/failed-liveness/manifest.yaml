@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: session-cache
+  namespace: kubecone-lab
+  labels:
+    kubecone.dev/scenario: failed-liveness
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: session-cache
+      kubecone.dev/scenario: failed-liveness
+  template:
+    metadata:
+      labels:
+        app: session-cache
+        kubecone.dev/scenario: failed-liveness
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            failureThreshold: 1
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi

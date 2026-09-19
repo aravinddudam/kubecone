@@ -1,0 +1,5 @@
+{
+  "target": "service/payments",
+  "namespace": "kubecone-lab",
+  "notes": "Service selector does not match the Deployment labels. v0.1 reports HEALTHY or empty endpoints until a dedicated routing analyzer lands."
+}

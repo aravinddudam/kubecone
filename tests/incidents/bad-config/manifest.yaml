@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: payment-config
+  namespace: kubecone-lab
+  labels:
+    kubecone.dev/scenario: bad-config
+data:
+  DATABASE_URL: ""
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: config-reader
+  namespace: kubecone-lab
+  labels:
+    kubecone.dev/scenario: bad-config
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: config-reader
+  template:
+    metadata:
+      labels:
+        app: config-reader
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          envFrom:
+            - configMapRef:
+                name: payment-config
+          command: ["sh", "-c"]
+          args:
+            - |
+              if [ -z "$DATABASE_URL" ]; then
+                echo "FATAL: DATABASE_URL is empty"
+                exit 1
+              fi
+              sleep 3600

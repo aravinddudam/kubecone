@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog-api
+  namespace: kubecone-lab
+  labels:
+    kubecone.dev/scenario: image-pull
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: catalog-api
+      kubecone.dev/scenario: image-pull
+  template:
+    metadata:
+      labels:
+        app: catalog-api
+        kubecone.dev/scenario: image-pull
+    spec:
+      containers:
+        - name: app
+          image: ghcr.io/kubecone-lab/this-image-does-not-exist:v0.0.0
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi

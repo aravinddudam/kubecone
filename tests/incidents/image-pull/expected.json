@@ -1,0 +1,5 @@
+{
+  "target": "deployment/catalog-api",
+  "namespace": "kubecone-lab",
+  "codes": ["IMAGE_PULL"]
+}

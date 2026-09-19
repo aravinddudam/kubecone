@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: resolv-override
+  namespace: kubecone-lab
+  labels:
+    kubecone.dev/scenario: dns
+data:
+  ndots: "broken"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dns-checker
+  namespace: kubecone-lab
+  labels:
+    kubecone.dev/scenario: dns
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dns-checker
+  template:
+    metadata:
+      labels:
+        app: dns-checker
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sh", "-c"]
+          args:
+            - |
+              while true; do
+                nslookup kubernetes.default.svc.cluster.local.invalid || true
+                sleep 5
+              done

@@ -1,0 +1,5 @@
+{
+  "target": "deployment/config-reader",
+  "namespace": "kubecone-lab",
+  "codes": ["CRASH_LOOP"]
+}
