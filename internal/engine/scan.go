@@ -23,12 +23,7 @@ type ScanOptions struct {
 }
 
 func Scan(ctx context.Context, client *kubernetes.Client, opts ScanOptions) ([]evidence.ScanItem, error) {
-	ns := opts.Namespace
-	if opts.AllNamespaces {
-		ns = metav1.NamespaceAll
-	} else if ns == "" {
-		ns = client.Namespace
-	}
+	ns := namespaceOrAll(client, opts.Namespace, opts.AllNamespaces)
 
 	kinds := opts.Kinds
 	if len(kinds) == 0 {
@@ -79,8 +74,26 @@ func Scan(ctx context.Context, client *kubernetes.Client, opts ScanOptions) ([]e
 		}
 	}
 
-	if !opts.UnhealthyOnly {
-		return items, nil
+	return filterUnhealthy(items, opts.UnhealthyOnly), nil
+}
+
+func ScanPods(ctx context.Context, client *kubernetes.Client, opts ScanOptions) ([]evidence.ScanItem, error) {
+	ns := namespaceOrAll(client, opts.Namespace, opts.AllNamespaces)
+
+	list, err := client.ListPods(ctx, ns, nil)
+	if err != nil {
+		return nil, fmt.Errorf("list pods: %w", err)
+	}
+	items := make([]evidence.ScanItem, 0, len(list.Items))
+	for i := range list.Items {
+		items = append(items, scanPod(&list.Items[i]))
+	}
+	return filterUnhealthy(items, opts.UnhealthyOnly), nil
+}
+
+func filterUnhealthy(items []evidence.ScanItem, only bool) []evidence.ScanItem {
+	if !only {
+		return items
 	}
 	out := make([]evidence.ScanItem, 0, len(items))
 	for _, item := range items {
@@ -88,7 +101,18 @@ func Scan(ctx context.Context, client *kubernetes.Client, opts ScanOptions) ([]e
 			out = append(out, item)
 		}
 	}
-	return out, nil
+	return out
+}
+
+func scanPod(pod *corev1.Pod) evidence.ScanItem {
+	desired := int32(len(pod.Spec.Containers))
+	var ready int32
+	for _, cs := range pod.Status.ContainerStatuses {
+		if cs.Ready {
+			ready++
+		}
+	}
+	return diagnoseWorkload("Pod", pod.Namespace, pod.Name, ready, desired, []corev1.Pod{*pod})
 }
 
 func ParseScanKinds(raw string) []string {
@@ -131,11 +155,13 @@ func scanDeployment(ctx context.Context, client *kubernetes.Client, d *appsv1.De
 	if d.Spec.Replicas != nil {
 		replicas = *d.Spec.Replicas
 	}
-	pods, err := podsForSelector(ctx, client, d.Namespace, d.Spec.Selector)
+	pods, err := collector.PodsForDeployment(ctx, client, d)
 	if err != nil {
 		return evidence.ScanItem{}, err
 	}
-	return diagnoseWorkload("Deployment", d.Namespace, d.Name, d.Status.ReadyReplicas, replicas, pods), nil
+	item := diagnoseWorkload("Deployment", d.Namespace, d.Name, d.Status.ReadyReplicas, replicas, pods)
+	item.Available = fmt.Sprintf("%d", d.Status.AvailableReplicas)
+	return item, nil
 }
 
 func scanStatefulSet(ctx context.Context, client *kubernetes.Client, sts *appsv1.StatefulSet) (evidence.ScanItem, error) {
@@ -189,18 +215,53 @@ func diagnoseWorkload(kind, namespace, name string, ready, desired int32, pods [
 	if primary := analyzer.Primary(findings); primary != nil {
 		item.Code = primary.Code
 		item.Title = primary.Title
+		item.Severity = strings.ToUpper(primary.Severity)
+		item.Summary = primary.Summary
+		item.Next = primary.Recommendation
 		item.Status = waitingOrPhase(pods)
 		if item.Status == "" {
 			item.Status = primary.Code
 		}
+		if primary.Attributes != nil {
+			item.Container = primary.Attributes["container"]
+			item.Image = primary.Attributes["image"]
+			item.Cause = primary.Attributes["classifiedReason"]
+			if item.Cause == "" {
+				item.Cause = primary.Attributes["cause"]
+			}
+		}
+		if item.Pod == "" {
+			item.Pod = failingPodName(pods)
+		}
 		return item
 	}
 	if desired > 0 && ready < desired {
-		item.Status = "NotReady"
+		item.Status = waitingOrPhase(pods)
+		if item.Status == "" || item.Status == string(corev1.PodRunning) {
+			item.Status = "NotReady"
+		}
 		item.Code = ""
 		item.Title = "Not fully ready"
+		item.Pod = failingPodName(pods)
 	}
 	return item
+}
+
+func failingPodName(pods []corev1.Pod) string {
+	for _, pod := range pods {
+		for _, cs := range pod.Status.ContainerStatuses {
+			if !cs.Ready || (cs.State.Waiting != nil && cs.State.Waiting.Reason != "") {
+				return pod.Name
+			}
+		}
+		if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodSucceeded {
+			return pod.Name
+		}
+	}
+	if len(pods) > 0 {
+		return pods[0].Name
+	}
+	return ""
 }
 
 func waitingOrPhase(pods []corev1.Pod) string {

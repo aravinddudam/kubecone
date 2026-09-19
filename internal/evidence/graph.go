@@ -37,7 +37,7 @@ func BuildGraph(snap Snapshot) Graph {
 			Kind:      w.Kind,
 			Name:      w.Name,
 			Namespace: w.Namespace,
-			Status:    fmt.Sprintf("%d/%d ready", w.ReadyReplicas, w.Replicas),
+			Status:    fmt.Sprintf("ready=%d/%d available=%d unavailable=%d", w.ReadyReplicas, w.Replicas, w.Available, w.Unavailable),
 		})
 	}
 
@@ -59,10 +59,11 @@ func BuildGraph(snap Snapshot) Graph {
 			Kind:      KindPod,
 			Name:      pod.Name,
 			Namespace: pod.Namespace,
-			Status:    pod.Phase,
+			Status:    podGraphStatus(pod, snap.Containers),
 			Attributes: map[string]string{
 				"node":   pod.Node,
 				"reason": pod.Reason,
+				"phase":  pod.Phase,
 			},
 		})
 		if snap.Workload != nil {
@@ -88,18 +89,12 @@ func BuildGraph(snap Snapshot) Graph {
 
 	for _, c := range snap.Containers {
 		id := nodeID(KindContainer, c.Namespace, c.Pod+"/"+c.Name)
-		status := "running"
-		if c.WaitingReason != "" {
-			status = c.WaitingReason
-		} else if c.TerminatedReason != "" {
-			status = c.TerminatedReason
-		}
 		addNode(&g, seen, Node{
 			ID:        id,
 			Kind:      KindContainer,
 			Name:      c.Name,
 			Namespace: c.Namespace,
-			Status:    status,
+			Status:    containerGraphStatus(c),
 			Attributes: map[string]string{
 				"image":         c.Image,
 				"restarts":      fmt.Sprintf("%d", c.RestartCount),
@@ -136,4 +131,49 @@ func readyStatus(ready bool) string {
 		return "Ready"
 	}
 	return "NotReady"
+}
+
+func podGraphStatus(pod PodFact, containers []ContainerFact) string {
+	var ready, total int
+	waiting := ""
+	for _, c := range containers {
+		if c.Pod != pod.Name {
+			continue
+		}
+		total++
+		if c.Ready {
+			ready++
+		}
+		if waiting == "" && c.WaitingReason != "" {
+			waiting = c.WaitingReason
+		}
+	}
+	s := fmt.Sprintf("phase=%s ready=%d/%d", valueOr(pod.Phase, "Unknown"), ready, total)
+	if waiting != "" {
+		s += " waiting=" + waiting
+	}
+	return s
+}
+
+func containerGraphStatus(c ContainerFact) string {
+	if c.WaitingReason != "" {
+		return "Waiting (" + c.WaitingReason + ")"
+	}
+	if c.TerminatedReason != "" {
+		return "Terminated (" + c.TerminatedReason + ")"
+	}
+	if c.Ready {
+		return "Ready"
+	}
+	if c.Started {
+		return "Running (not ready)"
+	}
+	return "running"
+}
+
+func valueOr(v, fallback string) string {
+	if v == "" {
+		return fallback
+	}
+	return v
 }

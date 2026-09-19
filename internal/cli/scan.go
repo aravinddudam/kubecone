@@ -2,13 +2,10 @@ package cli
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/aravinddudam/kubecone/internal/engine"
-	"github.com/aravinddudam/kubecone/internal/kubernetes"
 	"github.com/aravinddudam/kubecone/internal/reporter"
 )
 
@@ -17,11 +14,12 @@ func scanCmd(f *flags) *cobra.Command {
 		Use:     "scan",
 		Aliases: []string{"ls"},
 		Short:   "Scan a namespace for unhealthy workloads",
-		Long: `List Deployments (and optionally StatefulSets / DaemonSets) and run the
-same deterministic rules used by investigate. Use this to find what to
-investigate next.
+		Long: `Find problems in a namespace.
 
-By default scan looks at Deployments in the current namespace.`,
+scan lists Deployments (and optionally other workloads) and attaches the same
+failure codes investigate uses. Use --unhealthy to hide ready workloads.
+
+Then run investigate on one resource, and explain on the diagnosis code.`,
 		Example: `  kubecone scan -n banking-dev
   kubecone scan -n banking-dev --unhealthy
   kubecone scan -A --kind all
@@ -29,15 +27,7 @@ By default scan looks at Deployments in the current namespace.`,
   kubecone scan -n banking-dev --fail --unhealthy`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			timeout, err := parseTimeout(f.timeout)
-			if err != nil {
-				return err
-			}
-			client, err := kubernetes.New(kubernetes.Options{
-				Kubeconfig: f.kubeconfig,
-				Context:    f.context,
-				Namespace:  f.namespace,
-			})
+			client, timeout, err := f.connect()
 			if err != nil {
 				return err
 			}
@@ -54,26 +44,22 @@ By default scan looks at Deployments in the current namespace.`,
 			if err != nil {
 				return err
 			}
-			if strings.EqualFold(f.output, "json") || !f.quiet {
-				if err := reporter.WriteScan(cmd.OutOrStdout(), items, f.output); err != nil {
-					return err
-				}
-			} else {
-				for _, item := range items {
-					if !item.Unhealthy() {
-						continue
-					}
-					fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s/%s\t%s\n", item.Code, item.Kind, item.Name, item.Namespace)
-				}
+			ns := f.namespace
+			if f.allNamespaces {
+				ns = "(all)"
+			} else if ns == "" {
+				ns = client.Namespace
 			}
-			if f.fail {
-				for _, item := range items {
-					if item.Unhealthy() {
-						return ErrFinding
-					}
-				}
+			if err := reporter.WriteScanMeta(cmd.OutOrStdout(), items, f.output, reporter.ScanMeta{
+				Title:         "KubeCone scan",
+				Context:       client.Context,
+				Namespace:     ns,
+				UnhealthyOnly: f.unhealthy,
+				EmptyHint:     "No matching workloads.",
+			}); err != nil {
+				return err
 			}
-			return nil
+			return failIfUnhealthy(f.fail, items)
 		},
 	}
 

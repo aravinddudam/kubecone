@@ -70,7 +70,7 @@ func (c *Collector) collectWorkload(ctx context.Context, target kubernetes.Targe
 			return nil, fmt.Errorf("get deployment: %w", err)
 		}
 		snap.Workload = deploymentFact(d)
-		return c.podsFor(ctx, d.Namespace, d.Spec.Selector)
+		return c.podsForDeployment(ctx, d)
 	case "ReplicaSet":
 		rs, err := c.client.GetReplicaSet(ctx, target.Namespace, target.Name)
 		if err != nil {
@@ -127,6 +127,79 @@ func (c *Collector) podsFor(ctx context.Context, namespace string, selector *met
 	return list.Items, nil
 }
 
+func (c *Collector) podsForDeployment(ctx context.Context, d *appsv1.Deployment) ([]corev1.Pod, error) {
+	bySelector, err := c.podsFor(ctx, d.Namespace, d.Spec.Selector)
+	if err != nil {
+		return nil, err
+	}
+	owned, err := c.podsOwnedByDeployment(ctx, d)
+	if err != nil {
+		if len(bySelector) > 0 {
+			return bySelector, nil
+		}
+		return nil, err
+	}
+	return mergePods(bySelector, owned), nil
+}
+
+func PodsForDeployment(ctx context.Context, client *kubernetes.Client, d *appsv1.Deployment) ([]corev1.Pod, error) {
+	return New(client, Options{LogTail: 1}).podsForDeployment(ctx, d)
+}
+
+func (c *Collector) podsOwnedByDeployment(ctx context.Context, d *appsv1.Deployment) ([]corev1.Pod, error) {
+	rss, err := c.client.ListReplicaSetsForDeployment(ctx, d)
+	if err != nil {
+		return nil, err
+	}
+	rsNames := map[string]struct{}{}
+	for i := range rss.Items {
+		rs := rss.Items[i]
+		if ownedByName(rs.OwnerReferences, "Deployment", d.Name) {
+			rsNames[rs.Name] = struct{}{}
+		}
+	}
+	if len(rsNames) == 0 {
+		return nil, nil
+	}
+	list, err := c.client.ListPods(ctx, d.Namespace, nil)
+	if err != nil {
+		return nil, err
+	}
+	var out []corev1.Pod
+	for i := range list.Items {
+		p := list.Items[i]
+		if _, ok := rsNames[kubernetes.OwnerName(&p, "ReplicaSet")]; ok {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+func ownedByName(refs []metav1.OwnerReference, kind, name string) bool {
+	for _, ref := range refs {
+		if ref.Kind == kind && ref.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func mergePods(a, b []corev1.Pod) []corev1.Pod {
+	seen := map[string]struct{}{}
+	out := make([]corev1.Pod, 0, len(a)+len(b))
+	for _, group := range [][]corev1.Pod{a, b} {
+		for i := range group {
+			p := group[i]
+			if _, ok := seen[p.Name]; ok {
+				continue
+			}
+			seen[p.Name] = struct{}{}
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func deploymentFact(d *appsv1.Deployment) *evidence.WorkloadFact {
 	replicas := int32(1)
 	if d.Spec.Replicas != nil {
@@ -138,6 +211,7 @@ func deploymentFact(d *appsv1.Deployment) *evidence.WorkloadFact {
 		Namespace:     d.Namespace,
 		Replicas:      replicas,
 		ReadyReplicas: d.Status.ReadyReplicas,
+		Available:     d.Status.AvailableReplicas,
 		Unavailable:   d.Status.UnavailableReplicas,
 		Conditions:    workloadConditions(d.Status.Conditions),
 		Selector:      metav1.FormatLabelSelector(d.Spec.Selector),

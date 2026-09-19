@@ -47,6 +47,7 @@ type WorkloadFact struct {
 	Namespace       string      `json:"namespace"`
 	Replicas        int32       `json:"replicas"`
 	ReadyReplicas   int32       `json:"readyReplicas"`
+	Available       int32       `json:"availableReplicas,omitempty"`
 	Unavailable     int32       `json:"unavailableReplicas"`
 	Conditions      []Condition `json:"conditions,omitempty"`
 	Selector        string      `json:"selector,omitempty"`
@@ -212,9 +213,54 @@ type ScanItem struct {
 	Status    string `json:"status"`
 	Code      string `json:"code,omitempty"`
 	Title     string `json:"title,omitempty"`
+	Severity  string `json:"severity,omitempty"`
+	Pod       string `json:"pod,omitempty"`
+	Container string `json:"container,omitempty"`
+	Image     string `json:"image,omitempty"`
+	Cause     string `json:"cause,omitempty"`
+	Summary   string `json:"summary,omitempty"`
+	Next      string `json:"next,omitempty"`
+	Available string `json:"available,omitempty"`
 	Resource  string `json:"resource"`
 }
 
 func (s ScanItem) Unhealthy() bool {
-	return s.Code != "" && s.Code != CodeHealthy
+	if s.Code != "" && s.Code != CodeHealthy {
+		return true
+	}
+	switch s.Status {
+	case "Ready", "Running", "Succeeded", "Completed", "":
+		return false
+	default:
+		return true
+	}
+}
+
+type EventItem struct {
+	Namespace string `json:"namespace"`
+	Type      string `json:"type"`
+	Reason    string `json:"reason"`
+	Object    string `json:"object"`
+	Message   string `json:"message"`
+	Count     int32  `json:"count"`
+	Age       string `json:"age,omitempty"`
+}
+
+type NodeItem struct {
+	Name       string `json:"name"`
+	Status     string `json:"status"`
+	Roles      string `json:"roles"`
+	Version    string `json:"version"`
+	InternalIP string `json:"internalIP,omitempty"`
+}
+
+type NamespaceItem struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
+type ContextInfo struct {
+	Context   string `json:"context"`
+	Namespace string `json:"namespace"`
+	Server    string `json:"server,omitempty"`
 }

@@ -6,10 +6,10 @@
 
 Deterministic Kubernetes investigation CLI. It collects cluster evidence, builds an evidence graph, ranks failures with rules, and prints a terminal report or JSON.
 
-AI is optional and runs **after** the diagnosis. v0.1 does not call a model unless you pass `--ai`, and even then providers are stubs.
+AI is optional and runs **after** the diagnosis. Pass `--ai` to send the ranked evidence to OpenAI (`OPENAI_API_KEY`). The rules engine still decides the code; the model only explains and suggests next steps.
 
 ```bash
-kubecone scan -n banking-dev --unhealthy
+kubecone pods -n banking-dev --unhealthy
 kubecone investigate deployment/customer-service -n banking-dev
 kubecone explain IMAGE_PULL
 ```
@@ -150,7 +150,9 @@ Supported kinds: `pod`, `deploy`/`deployment`, `rs`/`replicaset`, `svc`/`service
 Against a live cluster:
 
 ```bash
-kubectl get deploy -A
+kubectl get deploy,pods -n banking-dev
+kubecone current-context
+kubecone pods -n banking-dev --unhealthy
 kubecone scan -n banking-dev --unhealthy
 kubecone investigate deployment/customer-service -n banking-dev
 kubecone investigate deployment/customer-service -n banking-dev -o json
@@ -173,23 +175,37 @@ kind delete cluster --name kubecone
 | Command | Alias | Purpose |
 | --- | --- | --- |
 | `kubecone investigate RESOURCE` | `inv`, `diag` | Collect evidence and diagnose one object |
-| `kubecone scan` | `ls` | List workloads and attach a failure code |
+| `kubecone scan` | `ls` | List Deployments (and optional other workloads) and attach a failure code |
+| `kubecone pods` | `po` | List pods and attach a failure code |
+| `kubecone events` | `ev` | List recent Warning events |
+| `kubecone nodes` | `no` | List nodes and Ready status |
+| `kubecone namespaces` | `ns` | List namespaces |
+| `kubecone current-context` | `ctx` | Print kubeconfig context, namespace, and API server |
 | `kubecone explain [CODE]` | | Describe a diagnosis code and the next step |
 | `kubecone version` | | Print version, Go runtime, OS/arch |
 | `kubecone --help` | | Command and flag reference |
 | `kubecone completion bash\|zsh\|fish\|powershell` | | Shell completion |
 
-```bash
-# One workload
-kubecone investigate deployment/customer-service -n banking-dev
-kubecone investigate pod/customer-service-5859cfc476-bbkc6 -n banking-dev
-kubecone investigate banking-dev/deploy/fraud-api -o json
+**scan** finds problems. **investigate** explains one object. **explain** documents a diagnosis code.
 
-# Namespace scan
+```bash
+# Inventory (start here if you are not sure what is broken)
+kubecone current-context
+kubecone pods -n banking-dev --unhealthy
+kubecone pods -A --unhealthy
+kubecone events -n banking-dev
+kubecone nodes
+kubecone ns
+
+# Workloads
 kubecone scan -n banking-dev
 kubecone scan -n banking-dev --unhealthy
 kubecone scan -A --kind all
-kubecone scan -n kube-system --kind daemonset
+
+# One object
+kubecone investigate deployment/customer-service -n banking-dev
+kubecone investigate pod/customer-service-5859cfc476-bbkc6 -n banking-dev
+kubecone investigate banking-dev/deploy/fraud-api -o json
 
 # Codes
 kubecone explain
@@ -220,8 +236,8 @@ kubecone version --short
 | `--log-tail` | `80` | log lines per container |
 | `--events` | `8` | recent events to print (`0` hides them) |
 | `--no-graph` | off | omit the evidence graph |
-| `--ai` | off | send ranked findings to a provider (stubs in v0.1) |
-| `--ai-provider` | none | `openai`, `anthropic`, or `ollama` |
+| `--ai` | off | after the rules diagnosis, ask OpenAI for cause and next steps |
+| `--ai-provider` | `openai` | `openai` (anthropic and ollama are still stubs) |
 
 ### `scan`
 
@@ -232,13 +248,35 @@ kubecone version --short
 | `--kind` | `deployment` | `deployment`, `statefulset`, `daemonset`, or `all` |
 | `--timeout` | `30s` | scan timeout |
 
-`--ai` does nothing useful yet. Providers stay stubbed so the pipeline remains collect → graph → rules → report.
+### `pods`
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `-A`, `--all-namespaces` | off | list pods in every namespace |
+| `--unhealthy` | off | only print pods with a failure code or non-ready status |
+| `--timeout` | `30s` | list timeout |
+
+### `events`
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `-A`, `--all-namespaces` | off | list events in every namespace |
+| `--type` | `warning` | `warning`, `normal`, or `all` |
+| `--limit` | `20` | maximum events to print |
+| `--timeout` | `30s` | list timeout |
+
+`--ai` calls OpenAI after the deterministic report. Set `OPENAI_API_KEY` (optional `OPENAI_MODEL`, default `gpt-4o-mini`). Anthropic and Ollama remain stubs.
+
+```bash
+export OPENAI_API_KEY="sk-..."
+kubecone investigate deployment/customer-service -n banking-dev --ai
+```
 
 ## Output and exit codes
 
 Text output (default) includes the primary diagnosis, related findings, evidence graph, and recent events. Skipped AI is hidden unless you pass `--ai`.
 
-JSON (`-o json`) is the contract for scripts and CI. Compare `primary.code` to the fixtures in `tests/incidents/*/expected.json`.
+JSON (`-o json`) is the contract for scripts and CI. `scan -o json` always emits an object with a `findings` array (`[]` when nothing matches, never `null`). Compare `primary.code` to the fixtures in `tests/incidents/*/expected.json`.
 
 | Exit code | Meaning |
 | --- | --- |
@@ -257,7 +295,7 @@ kubecone scan -n kubecone-lab --unhealthy --fail
 
 | Code | Meaning | Typical next step |
 | --- | --- | --- |
-| `IMAGE_PULL` | image cannot be pulled | fix tag, registry reachability, or credentials (ECR → IAM/IRSA) |
+| `IMAGE_PULL` | image cannot be pulled | use the classified runtime error: missing tag, auth, network, or DNS. Do not assume imagePullSecret. |
 | `FAILED_SCHEDULING` | pod never bound to a node | requests, nodeSelector, taints, PVC |
 | `OOM_KILLED` | container exceeded its memory limit | raise the memory limit |
 | `PROBE_FAILED` | readiness or liveness probe failing | probe path, port, `initialDelaySeconds` |
@@ -284,13 +322,13 @@ go test -tags=kind -timeout 5m ./tests/integration
 
 Broken-app fixtures: [tests/incidents/README.md](tests/incidents/README.md). Architecture: [docs/architecture.md](docs/architecture.md).
 
-v0.1 Go module dependencies: `k8s.io/client-go`, `k8s.io/apimachinery`, `k8s.io/api`, `github.com/spf13/cobra`. Prometheus, OpenTelemetry, and controller-runtime are not required.
+v0.2 Go module dependencies: `k8s.io/client-go`, `k8s.io/apimachinery`, `k8s.io/api`, `github.com/spf13/cobra`. Prometheus, OpenTelemetry, and controller-runtime are not required.
 
 ## Repository layout
 
 ```
 cmd/kubecone/           CLI entrypoint
-internal/cli/           investigate, scan, explain, version
+internal/cli/           investigate, scan, pods, events, nodes, namespaces, context, explain, version
 internal/kubernetes/    client-go access layer and kind/name parsing
 internal/collector/     pods, events, logs, metrics seam
 internal/evidence/      snapshot, graph, findings

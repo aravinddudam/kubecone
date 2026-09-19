@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -13,9 +12,11 @@ func explainCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "explain [CODE]",
 		Short: "Explain a diagnosis code",
-		Long: `Print what a KubeCone diagnosis code means and what to do next.
+		Long: `Print what a KubeCone diagnosis code means, common causes, and what to do next.
 
-With no argument, lists every code v0.1 can emit.`,
+scan finds problems. investigate explains one object. explain documents a code.
+
+With no argument, lists every code v0.2 can emit.`,
 		Example: `  kubecone explain
   kubecone explain IMAGE_PULL
   kubecone explain OOM_KILLED`,
@@ -31,24 +32,40 @@ With no argument, lists every code v0.1 can emit.`,
 			return out, cobra.ShellCompDirectiveNoFileComp
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			out := cmd.OutOrStdout()
 			if len(args) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "CODE                 MEANING")
+				fmt.Fprintln(out, "CODE                 MEANING")
 				for _, c := range analyzer.Codes() {
-					fmt.Fprintf(cmd.OutOrStdout(), "%-20s %s\n", c.Code, c.Title)
+					fmt.Fprintf(out, "%-20s %s\n", c.Code, c.Title)
 				}
-				fmt.Fprintln(cmd.OutOrStdout())
-				fmt.Fprintln(cmd.OutOrStdout(), `Use "kubecone explain CODE" for the recommended next step.`)
+				fmt.Fprintln(out)
+				fmt.Fprintln(out, `Use "kubecone explain CODE" for causes and the recommended next step.`)
 				return nil
 			}
-			code := strings.ToUpper(strings.TrimSpace(args[0]))
-			info, ok := analyzer.LookupCode(code)
+			info, ok := analyzer.LookupCode(args[0])
 			if !ok {
 				return fmt.Errorf("unknown code %q (try kubecone explain)", args[0])
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Code:    %s\n", info.Code)
-			fmt.Fprintf(cmd.OutOrStdout(), "Title:   %s\n", info.Title)
-			fmt.Fprintf(cmd.OutOrStdout(), "Summary: %s\n", info.Summary)
-			fmt.Fprintf(cmd.OutOrStdout(), "Next:    %s\n", info.Next)
+			fmt.Fprintf(out, "%s\n\n", info.Code)
+			fmt.Fprintf(out, "%s\n\n", info.Title)
+			fmt.Fprintf(out, "%s\n", info.Summary)
+			if len(info.Causes) > 0 {
+				fmt.Fprintln(out)
+				fmt.Fprintln(out, "Common causes:")
+				for _, cause := range info.Causes {
+					fmt.Fprintf(out, "  - %s\n", cause)
+				}
+			}
+			if info.Next != "" {
+				fmt.Fprintln(out)
+				fmt.Fprintf(out, "Next:\n  %s\n", info.Next)
+			}
+			if info.Investigate != "" {
+				fmt.Fprintln(out)
+				fmt.Fprintln(out, "Investigate with:")
+				fmt.Fprintf(out, "  %s\n", info.Investigate)
+				fmt.Fprintln(out, "  kubecone scan -n <namespace> --unhealthy")
+			}
 			return nil
 		},
 	}

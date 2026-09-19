@@ -74,6 +74,9 @@ func TestImagePull(t *testing.T) {
 	if Primary(findings).Code != evidence.CodeImagePull {
 		t.Fatalf("got %s", codes(findings))
 	}
+	if strings.Contains(strings.ToLower(Primary(findings).Recommendation), "imagepullsecret") {
+		t.Fatalf("not-found pull must not prescribe imagePullSecret: %s", Primary(findings).Recommendation)
+	}
 }
 
 func TestScheduling(t *testing.T) {
@@ -136,6 +139,37 @@ func TestProbe(t *testing.T) {
 	findings := Run(snap, nil)
 	if Primary(findings).Code != evidence.CodeProbeFailed {
 		t.Fatalf("got %s", codes(findings))
+	}
+}
+
+func TestImagePullDedupesEvent(t *testing.T) {
+	snap := evidence.Snapshot{
+		Pods: []evidence.PodFact{{Name: "api-0", Namespace: "default", Phase: "Pending"}},
+		Containers: []evidence.ContainerFact{{
+			Pod:            "api-0",
+			Namespace:      "default",
+			Name:           "app",
+			Image:          "example.invalid/missing:v1",
+			WaitingReason:  "ErrImagePull",
+			WaitingMessage: `Failed to pull image "example.invalid/missing:v1": not found`,
+		}},
+		Events: []evidence.EventFact{{
+			Reason:       "Failed",
+			Message:      `Failed to pull image "example.invalid/missing:v1": not found`,
+			InvolvedKind: "Pod",
+			InvolvedName: "api-0",
+			Namespace:    "default",
+		}},
+	}
+	findings := Run(snap, nil)
+	n := 0
+	for _, f := range findings {
+		if f.Code == evidence.CodeImagePull {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("expected 1 IMAGE_PULL finding, got %d (%v)", n, codes(findings))
 	}
 }
 

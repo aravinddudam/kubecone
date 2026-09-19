@@ -2,7 +2,6 @@ package cli
 
 import (
 	"errors"
-	"fmt"
 	"runtime"
 
 	"github.com/spf13/cobra"
@@ -58,18 +57,23 @@ func New() *cobra.Command {
 diagnoses common workload failures before any AI model is involved.
 
 Commands:
-  investigate   Diagnose one Deployment, Pod, or Service
-  scan          List workloads in a namespace and flag failures
-  explain       Describe a diagnosis code
-  version       Print build information`,
-		Example: `  kubecone investigate deployment/customer-service -n banking-dev
-  kubecone investigate deploy/fraud-api -n banking-dev --quiet --fail
+  investigate      Diagnose one Deployment, Pod, or Service
+  scan             List workloads in a namespace and flag failures
+  pods             List pods and flag failures
+  events           List recent Warning events
+  nodes            List nodes
+  namespaces       List namespaces
+  current-context  Show kubeconfig context and API server
+  explain          Describe a diagnosis code
+  version          Print build information`,
+		Example: `  kubecone pods -n banking-dev --unhealthy
+  kubecone investigate deployment/customer-service -n banking-dev
   kubecone scan -n banking-dev --unhealthy
-  kubecone scan -A -o json
+  kubecone events -n banking-dev
   kubecone explain IMAGE_PULL`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		Version:       fmt.Sprintf("%s (%s)", version.Version, version.Commit),
+		Version:       version.String(),
 	}
 
 	root.SetVersionTemplate("kubecone {{.Version}}\n")
@@ -83,6 +87,11 @@ Commands:
 
 	root.AddCommand(investigateCmd(f))
 	root.AddCommand(scanCmd(f))
+	root.AddCommand(podsCmd(f))
+	root.AddCommand(eventsCmd(f))
+	root.AddCommand(nodesCmd(f))
+	root.AddCommand(namespacesCmd(f))
+	root.AddCommand(contextCmd(f))
 	root.AddCommand(explainCmd())
 	root.AddCommand(versionCmd())
 	return root
@@ -100,7 +109,7 @@ func versionCmd() *cobra.Command {
 				cmd.Printf("%s\n", version.Version)
 				return
 			}
-			cmd.Printf("kubecone %s (%s)\n", version.Version, version.Commit)
+			cmd.Printf("kubecone %s\n", version.String())
 			cmd.Printf("go:      %s\n", runtime.Version())
 			cmd.Printf("os/arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 		},

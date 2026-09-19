@@ -8,8 +8,8 @@ import (
 	"github.com/aravinddudam/kubecone/internal/evidence"
 )
 
-// Provider is the optional last step of the pipeline. v0.1 never calls a
-// model unless --ai is set, and even then it only sends already-ranked findings.
+// Provider is the optional last step of the pipeline. A model is called only
+// when --ai is set. Ranked findings are sent, not a blank "what's wrong?" prompt.
 type Provider interface {
 	Name() string
 	Diagnose(ctx context.Context, report *evidence.Report) (*evidence.AINote, error)
@@ -17,8 +17,8 @@ type Provider interface {
 
 func Lookup(name string) Provider {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "openai":
-		return OpenAI{APIKey: os.Getenv("OPENAI_API_KEY")}
+	case "openai", "":
+		return NewOpenAIFromEnv()
 	case "anthropic":
 		return Anthropic{APIKey: os.Getenv("ANTHROPIC_API_KEY")}
 	case "ollama":

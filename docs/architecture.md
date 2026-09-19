@@ -2,7 +2,7 @@
 
 KubeCone is a Go CLI. It investigates a Kubernetes resource and prints a diagnosis.
 
-The v0.1 pipeline is deterministic. An LLM is an optional last step, not the product.
+The v0.2 pipeline is deterministic. An LLM is an optional last step, not the product.
 
 ```
 kubecone investigate deployment/payment-api
@@ -43,8 +43,8 @@ kubecone investigate deployment/payment-api
 | `internal/analyzer` | deterministic rules and ranking |
 | `internal/engine` | investigate orchestration and namespace scan |
 | `internal/reporter` | text and JSON output |
-| `internal/cli` | Cobra commands: investigate, scan, explain, version |
-| `internal/ai` | provider interface; stubs only in v0.1 |
+| `internal/cli` | Cobra commands: investigate, scan, pods, events, nodes, namespaces, current-context, explain, version |
+| `internal/ai` | optional OpenAI enrichment after ranked findings; anthropic/ollama still stubs |
 
 ## What this borrowed, and what it did not copy
 

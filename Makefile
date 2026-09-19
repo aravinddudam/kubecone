@@ -1,6 +1,6 @@
 BINARY := bin/kubecone
-VERSION ?= 0.1.0
-COMMIT ?= dev
+VERSION ?= 0.2.0
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null)
 MODULE := github.com/aravinddudam/kubecone
 
 .PHONY: build test tidy vet kind-test

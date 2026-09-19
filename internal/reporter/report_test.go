@@ -22,12 +22,22 @@ func sampleReport() *evidence.Report {
 			Resource:       "shop/Pod/payment-api-0",
 			Recommendation: "Raise memory limit from 32Mi to 48Mi",
 		},
-		Findings: []evidence.Finding{{
-			Code:     evidence.CodeOOMKilled,
-			Severity: evidence.SevCritical,
-			Title:    "Container killed because it ran out of memory",
-			Summary:  "payment-api-0/app was OOMKilled",
-		}},
+		Findings: []evidence.Finding{
+			{
+				Code:     evidence.CodeOOMKilled,
+				Severity: evidence.SevCritical,
+				Title:    "Container killed because it ran out of memory",
+				Summary:  "payment-api-0/app was OOMKilled",
+				Resource: "shop/Pod/payment-api-0",
+			},
+			{
+				Code:     evidence.CodeOOMKilled,
+				Severity: evidence.SevCritical,
+				Title:    "Container killed because it ran out of memory",
+				Summary:  "payment-api-0/app was OOMKilled",
+				Resource: "shop/Pod/payment-api-0",
+			},
+		},
 		Graph: evidence.Graph{Nodes: []evidence.Node{{Kind: "Deployment", Name: "payment-api", Status: "0/1 ready"}}},
 		AI:    &evidence.AINote{Provider: "none", Skipped: true, Reason: "deterministic diagnosis only"},
 	}
@@ -55,6 +65,9 @@ func TestJSONAndTerminal(t *testing.T) {
 	out := text.String()
 	if !strings.Contains(out, "OOM_KILLED") {
 		t.Fatalf("terminal output missing code: %s", out)
+	}
+	if strings.Contains(out, "Related findings") {
+		t.Fatalf("duplicate primary should not appear as related: %s", out)
 	}
 	if strings.Contains(out, "skipped") {
 		t.Fatalf("skipped AI should be hidden by default: %s", out)
@@ -90,5 +103,77 @@ func TestScanTable(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "IMAGE_PULL") {
 		t.Fatalf("scan table: %s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "KubeCone scan") {
+		t.Fatalf("scan should print a header: %s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "kubecone investigate") {
+		t.Fatalf("scan should tell the user to investigate: %s", buf.String())
+	}
+}
+
+func TestScanJSONEmptyFindings(t *testing.T) {
+	var buf bytes.Buffer
+	if err := WriteScanMeta(&buf, nil, "json", ScanMeta{Context: "default", Namespace: "banking-dev"}); err != nil {
+		t.Fatal(err)
+	}
+	raw := buf.String()
+	if strings.Contains(raw, `"findings": null`) {
+		t.Fatalf("empty scan json must not use null findings: %s", raw)
+	}
+	var parsed ScanReport
+	if err := json.Unmarshal(buf.Bytes(), &parsed); err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Findings == nil {
+		t.Fatal("findings should be empty slice")
+	}
+	if parsed.Namespace != "banking-dev" || parsed.Count != 0 {
+		t.Fatalf("%+v", parsed)
+	}
+}
+
+func TestWriteEmptyAndContext(t *testing.T) {
+	var buf bytes.Buffer
+	if err := WriteScan(&buf, nil, "text"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "No matching workloads.") {
+		t.Fatalf("empty scan: %s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "KubeCone scan") {
+		t.Fatalf("empty scan must still print a header: %s", buf.String())
+	}
+
+	buf.Reset()
+	if err := WritePods(&buf, nil, "text"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "No matching pods.") {
+		t.Fatalf("empty pods: %s", buf.String())
+	}
+
+	buf.Reset()
+	if err := WriteContext(&buf, evidence.ContextInfo{Context: "k3s", Namespace: "default", Server: "https://127.0.0.1"}, "text"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "k3s") || !strings.Contains(buf.String(), "https://127.0.0.1") {
+		t.Fatalf("context: %s", buf.String())
+	}
+}
+
+func TestTerminalAI(t *testing.T) {
+	report := sampleReport()
+	report.AI = &evidence.AINote{
+		Provider: "openai",
+		Text:     "Likely cause:\nMissing image tag.\n\nWhat to do next:\n1. Check ECR.",
+	}
+	var buf bytes.Buffer
+	if err := Write(&buf, report, Options{Format: "text", HideAISkip: false, MaxEvents: 0}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "AI") || !strings.Contains(out, "Missing image tag") || !strings.Contains(out, "openai") {
+		t.Fatalf("ai section: %s", out)
 	}
 }

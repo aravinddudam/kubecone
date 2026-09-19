@@ -27,9 +27,10 @@ kubecone investigate deployment/payment-api -n kubecone-lab -o json
 
 The `primary.code` field is what CI compares against `tests/incidents/*/expected.json`.
 
-Scan a namespace first when you do not know which workload is broken:
+Scan a namespace first when you do not know which workload is broken. `pods --unhealthy` lists failing pods even when they are not owned by a Deployment:
 
 ```bash
+kubecone pods -n kubecone-lab --unhealthy
 kubecone scan -n kubecone-lab --unhealthy
 kubecone explain IMAGE_PULL
 ```

@@ -28,7 +28,24 @@ func Run(snap evidence.Snapshot, analyzers []Analyzer) []evidence.Finding {
 			findings = append(findings, evidence.Correlate(snap, f))
 		}
 	}
-	return Rank(findings)
+	return Dedupe(Rank(findings))
+}
+
+func Dedupe(findings []evidence.Finding) []evidence.Finding {
+	if len(findings) < 2 {
+		return findings
+	}
+	seen := map[string]struct{}{}
+	out := make([]evidence.Finding, 0, len(findings))
+	for _, f := range findings {
+		key := f.Code + "\x00" + f.Resource + "\x00" + f.Title
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, f)
+	}
+	return out
 }
 
 var severityRank = map[string]int{

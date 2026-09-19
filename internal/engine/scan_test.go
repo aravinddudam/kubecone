@@ -58,6 +58,9 @@ func TestScanImagePull(t *testing.T) {
 	if items[0].Status != "ImagePullBackOff" {
 		t.Fatalf("status=%s", items[0].Status)
 	}
+	if items[0].Cause == "" {
+		t.Fatalf("expected classified cause, item=%+v", items[0])
+	}
 }
 
 func TestParseScanKinds(t *testing.T) {
@@ -67,5 +70,46 @@ func TestParseScanKinds(t *testing.T) {
 	}
 	if ParseScanKinds("sts")[0] != "StatefulSet" {
 		t.Fatalf("sts=%v", ParseScanKinds("sts"))
+	}
+}
+
+func TestScanPodsUnhealthy(t *testing.T) {
+	cs := fake.NewSimpleClientset(
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "ok", Namespace: "banking-dev"},
+			Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodRunning,
+				ContainerStatuses: []corev1.ContainerStatus{{
+					Name:  "app",
+					Ready: true,
+				}},
+			},
+		},
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "customer-service-1", Namespace: "banking-dev"},
+			Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodPending,
+				ContainerStatuses: []corev1.ContainerStatus{{
+					Name: "app",
+					State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{
+						Reason:  "ImagePullBackOff",
+						Message: "failed to resolve reference",
+					}},
+				}},
+			},
+		},
+	)
+	client := kubernetes.NewForInterface(cs, "banking-dev")
+	items, err := ScanPods(context.Background(), client, ScanOptions{Namespace: "banking-dev", UnhealthyOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("items=%d", len(items))
+	}
+	if items[0].Name != "customer-service-1" || items[0].Code != evidence.CodeImagePull {
+		t.Fatalf("got %+v", items[0])
 	}
 }

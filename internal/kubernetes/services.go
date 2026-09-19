@@ -22,3 +22,7 @@ func (c *Client) ListNodes(ctx context.Context) (*corev1.NodeList, error) {
 func (c *Client) GetNode(ctx context.Context, name string) (*corev1.Node, error) {
 	return c.Kube.CoreV1().Nodes().Get(ctx, name, metav1.GetOptions{})
 }
+
+func (c *Client) ListNamespaces(ctx context.Context) (*corev1.NamespaceList, error) {
+	return c.Kube.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+}

@@ -19,10 +19,14 @@ func containerFacts(pods []corev1.Pod) []evidence.ContainerFact {
 				Pod:          pod.Name,
 				Namespace:    pod.Namespace,
 				Name:         cs.Name,
-				Image:        cs.Image,
 				Ready:        cs.Ready,
 				RestartCount: cs.RestartCount,
 				Started:      cs.Started != nil && *cs.Started,
+			}
+			if spec := specImage(pod, cs.Name); spec != "" {
+				fact.Image = spec
+			} else {
+				fact.Image = cs.Image
 			}
 			if res, ok := limits[cs.Name]; ok {
 				fact.MemoryRequest = res.memReq
@@ -50,6 +54,20 @@ func containerFacts(pods []corev1.Pod) []evidence.ContainerFact {
 		}
 	}
 	return out
+}
+
+func specImage(pod corev1.Pod, name string) string {
+	for _, c := range pod.Spec.Containers {
+		if c.Name == name {
+			return c.Image
+		}
+	}
+	for _, c := range pod.Spec.InitContainers {
+		if c.Name == name {
+			return c.Image
+		}
+	}
+	return ""
 }
 
 type resources struct {

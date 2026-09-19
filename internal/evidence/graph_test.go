@@ -1,6 +1,9 @@
 package evidence
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestBuildGraphLinksWorkloadToPod(t *testing.T) {
 	snap := Snapshot{
@@ -25,5 +28,20 @@ func TestBuildGraphLinksWorkloadToPod(t *testing.T) {
 	}
 	if !foundOwns {
 		t.Fatal("expected owns edge from deployment to pod")
+	}
+	var podStatus, ctrStatus string
+	for _, n := range g.Nodes {
+		if n.Kind == KindPod {
+			podStatus = n.Status
+		}
+		if n.Kind == KindContainer {
+			ctrStatus = n.Status
+		}
+	}
+	if !strings.Contains(podStatus, "phase=Pending") || !strings.Contains(podStatus, "ready=") {
+		t.Fatalf("pod status should distinguish phase vs readiness, got %q", podStatus)
+	}
+	if !strings.Contains(ctrStatus, "Waiting") || !strings.Contains(ctrStatus, "ImagePullBackOff") {
+		t.Fatalf("container status should be Waiting(reason), got %q", ctrStatus)
 	}
 }

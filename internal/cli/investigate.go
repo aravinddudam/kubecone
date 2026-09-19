@@ -18,21 +18,26 @@ func investigateCmd(f *flags) *cobra.Command {
 		Use:     "investigate RESOURCE",
 		Aliases: []string{"inv", "diag"},
 		Short:   "Collect evidence and diagnose a Kubernetes resource",
-		Long: `Investigate a workload by collecting Kubernetes evidence, building a
-graph, and running deterministic analyzers.
+		Long: `Collect evidence and diagnose one workload.
 
 RESOURCE is kind/name, or namespace/kind/name. A bare name is treated as a
-Deployment. Supported kinds: pod, deploy, rs, svc, sts, ds, job, cronjob.`,
+Deployment. Supported kinds: pod, deploy, rs, svc, sts, ds, job, cronjob.
+
+scan finds problems. investigate explains one object. explain documents a code.`,
 		Example: `  kubecone investigate deployment/customer-service -n banking-dev
   kubecone investigate deploy/fraud-api -n banking-dev -o json
   kubecone investigate pod/customer-service-5859cfc476-bbkc6 -n banking-dev
   kubecone investigate banking-dev/deploy/customer-service --quiet
-  kubecone investigate deploy/payment-api -n shop --fail --no-graph`,
+  kubecone investigate deploy/payment-api -n shop --fail --no-graph
+  kubecone investigate deployment/customer-service -n banking-dev --ai`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			timeout, err := parseTimeout(f.timeout)
 			if err != nil {
 				return err
+			}
+			if f.ai && f.timeout == "30s" {
+				timeout = 90 * time.Second
 			}
 			target, err := kubernetes.ParseTarget(args[0], f.namespace)
 			if err != nil {
@@ -67,8 +72,8 @@ Deployment. Supported kinds: pod, deploy, rs, svc, sts, ds, job, cronjob.`,
 	cmd.Flags().StringVar(&f.timeout, "timeout", "30s", "investigation timeout")
 	cmd.Flags().IntVar(&f.events, "events", 8, "recent events to print (0 hides the section)")
 	cmd.Flags().BoolVar(&f.noGraph, "no-graph", false, "omit the evidence graph from text output")
-	cmd.Flags().BoolVar(&f.ai, "ai", false, "send ranked evidence to a configured AI provider (off by default)")
-	cmd.Flags().StringVar(&f.aiProvider, "ai-provider", "", "ai provider: openai|anthropic|ollama")
+	cmd.Flags().BoolVar(&f.ai, "ai", false, "after the rules diagnosis, ask OpenAI for cause and next steps")
+	cmd.Flags().StringVar(&f.aiProvider, "ai-provider", "openai", "ai provider: openai (anthropic and ollama are still stubs)")
 	return cmd
 }
 

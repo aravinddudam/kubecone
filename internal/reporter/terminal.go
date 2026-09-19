@@ -37,11 +37,19 @@ func Terminal(out io.Writer, report *evidence.Report, opts Options) error {
 	fmt.Fprintf(out, "When:    %s\n", report.CollectedAt.UTC().Format("2006-01-02 15:04:05 UTC"))
 	fmt.Fprintln(out)
 
+	writeState(out, report, bold, dim)
+
 	if report.Primary != nil {
 		fmt.Fprintln(out, bold("Primary diagnosis"))
 		fmt.Fprintf(out, "  [%s] %s\n", sev(report.Primary.Severity), report.Primary.Title)
 		fmt.Fprintf(out, "  Code:     %s\n", report.Primary.Code)
 		fmt.Fprintf(out, "  Resource: %s\n", report.Primary.Resource)
+		if img := attr(report.Primary, "image"); img != "" {
+			fmt.Fprintf(out, "  Image:    %s\n", img)
+		}
+		if reason := attr(report.Primary, "classifiedReason"); reason != "" {
+			fmt.Fprintf(out, "  Reason:   %s\n", reason)
+		}
 		fmt.Fprintf(out, "  %s\n", report.Primary.Summary)
 		if report.Primary.Recommendation != "" {
 			fmt.Fprintf(out, "  Next:     %s\n", report.Primary.Recommendation)
@@ -49,9 +57,10 @@ func Terminal(out io.Writer, report *evidence.Report, opts Options) error {
 		fmt.Fprintln(out)
 	}
 
-	if len(report.Findings) > 1 {
+	related := relatedFindings(report)
+	if len(related) > 0 {
 		fmt.Fprintln(out, bold("Related findings"))
-		for i, f := range report.Findings[1:] {
+		for i, f := range related {
 			fmt.Fprintf(out, "  %d. [%s] %s (%s)\n", i+1, sev(f.Severity), f.Title, f.Code)
 			fmt.Fprintf(out, "     %s\n", f.Summary)
 		}
@@ -94,10 +103,91 @@ func Terminal(out io.Writer, report *evidence.Report, opts Options) error {
 		if report.AI.Skipped {
 			fmt.Fprintf(out, "  skipped (%s): %s\n", report.AI.Provider, report.AI.Reason)
 		} else {
-			fmt.Fprintf(out, "  %s\n", report.AI.Text)
+			fmt.Fprintf(out, "  provider: %s\n", report.AI.Provider)
+			for _, line := range strings.Split(report.AI.Text, "\n") {
+				fmt.Fprintf(out, "  %s\n", line)
+			}
 		}
 	}
 	return nil
+}
+
+func writeState(out io.Writer, report *evidence.Report, bold, dim func(string) string) {
+	w := report.Evidence.Workload
+	if w == nil && len(report.Evidence.Pods) == 0 {
+		return
+	}
+	fmt.Fprintln(out, bold("State"))
+	if w != nil {
+		fmt.Fprintf(out, "  %s: %s\n", w.Kind, w.Name)
+		fmt.Fprintf(out, "  Ready: %d/%d   Available: %d   Unavailable: %d\n", w.ReadyReplicas, w.Replicas, w.Available, w.Unavailable)
+	}
+	for _, pod := range report.Evidence.Pods {
+		ready, total := 0, 0
+		for _, c := range report.Evidence.Containers {
+			if c.Pod != pod.Name {
+				continue
+			}
+			total++
+			if c.Ready {
+				ready++
+			}
+		}
+		fmt.Fprintf(out, "  Pod phase: %s\n", dim(valueOr(pod.Phase, "Unknown")))
+		fmt.Fprintf(out, "  Container readiness: %d/%d\n", ready, total)
+		for _, c := range report.Evidence.Containers {
+			if c.Pod != pod.Name {
+				continue
+			}
+			fmt.Fprintf(out, "  Container state: %s %s\n", c.Name, dim(containerState(c)))
+			if c.Image != "" {
+				fmt.Fprintf(out, "  Image: %s\n", c.Image)
+			}
+		}
+		break
+	}
+	fmt.Fprintln(out)
+}
+
+func containerState(c evidence.ContainerFact) string {
+	if c.WaitingReason != "" {
+		return "Waiting (" + c.WaitingReason + ")"
+	}
+	if c.TerminatedReason != "" {
+		return "Terminated (" + c.TerminatedReason + ")"
+	}
+	if c.Ready {
+		return "Ready"
+	}
+	return "Running (not ready)"
+}
+
+func relatedFindings(report *evidence.Report) []evidence.Finding {
+	if report.Primary == nil || len(report.Findings) == 0 {
+		return nil
+	}
+	var out []evidence.Finding
+	for _, f := range report.Findings {
+		if f.Code == report.Primary.Code && (f.Resource == report.Primary.Resource || f.Title == report.Primary.Title) {
+			continue
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+func attr(f *evidence.Finding, key string) string {
+	if f == nil || f.Attributes == nil {
+		return ""
+	}
+	return f.Attributes[key]
+}
+
+func valueOr(v, fallback string) string {
+	if strings.TrimSpace(v) == "" {
+		return fallback
+	}
+	return v
 }
 
 func terminalQuiet(out io.Writer, report *evidence.Report, sev func(string) string) error {
@@ -109,6 +199,10 @@ func terminalQuiet(out io.Writer, report *evidence.Report, sev func(string) stri
 	fmt.Fprintf(out, "%s\n", report.Primary.Summary)
 	if report.Primary.Recommendation != "" {
 		fmt.Fprintf(out, "Next: %s\n", report.Primary.Recommendation)
+	}
+	if report.AI != nil && !report.AI.Skipped && strings.TrimSpace(report.AI.Text) != "" {
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, report.AI.Text)
 	}
 	return nil
 }
